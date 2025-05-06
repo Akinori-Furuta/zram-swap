@@ -1,0 +1,211 @@
+#!/bin/bash
+
+### BEGIN INIT INFO
+# Description:     Setup zram based swap
+# Config:          /etc/default/zram
+# Provides:        zram
+# Required-Start:
+# Required-Stop:
+# Default-Start:   3 4 5
+# Default-Stop:    0 1 6
+# Short-Description: Setup zram based swap
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+MyBaseName="$( /bin/basename "$0" )"
+MyBaseNameNoSpace="$( /bin/echo -n "${MyBaseName}" | /bin/tr '\000-\040' '_' )"
+
+# Include zram-swap defaults
+ZramSwapDefault="/etc/default/${MyBaseName}"
+if [ -r "${ZramSwapDefault}" ]
+then
+        source "${ZramSwapDefault}"
+fi
+
+VarRunDir="/var/run/${MyBaseNameNoSpace}"
+
+if [ ! -d "${VarRunDir}" ]
+then
+	if ! /bin/mkdir -p "${VarRunDir}"
+	then
+		log_failure_msg "Can not create var directory \"${VarRunDir}\"."
+		exit 1
+	fi
+fi
+
+if [ -z "${ZRAM_SWAP_NUM_DEVICES}" ]
+then
+	ZRAM_SWAP_NUM_DEVICES=1
+fi
+
+case "$1" in
+(start|restart)
+	if [ ! -d /sys/module/zram ] && [ ! -d /sys/class/zram-control ]
+	then
+		if ! /usr/sbin/modprobe zram "num_devices=${ZRAM_SWAP_NUM_DEVICES}"
+		then
+			log_failure_msg "Kernel does not provide zram module."
+			exit 1
+		fi
+	fi
+	;;
+(*)
+	# Do nothing.
+	;;
+esac
+
+if [ -z "${ZRAM_SWAP_DEV}" ]
+then
+	ZRAM_SWAP_DEV=0
+fi
+
+if [ -z "${ZRAM_SWAP_COMP_ALGORITHM}" ]
+then
+	ZRAM_SWAP_COMP_ALGORITHM="lz4"
+fi
+
+if [ -z "${ZRAM_SWAP_DISKSIZE}" ]
+then
+	ZRAM_SWAP_DISKSIZE="256M"
+fi
+
+if [ -z "${ZRAM_SWAP_PRIORITY}" ]
+then
+	ZRAM_SWAP_PRIORITY=20
+fi
+
+SysBlockZram=""
+DevBlockZram=""
+VarRunSwapState="${VarRunDir}/state"
+
+if [ -r "${VarRunSwapState}" ]
+then
+	source "${VarRunSwapState}"
+fi
+
+function SwapAssigned() {
+	/sbin/swapon --noheadings | /bin/awk '{print $1}' | /bin/grep -w -q "${DevBlockZram}"
+	return $?
+}
+
+DevBlockZramActive="/dev/zram${ZRAM_SWAP_DEV_ACTIVE}"
+
+function ZramSwapStart() {
+	local	result
+
+	if [ "${ZRAM_SWAP_DEV}" == "hot_add" ]
+	then
+		ZRAM_SWAP_DEV="$( cat /sys/class/zram-control/hot_add )"
+		result=$?
+		if [ ${result} -ne 0 ]
+		then
+			log_failure_msg "Can not hot add zram device."
+			return 1
+		fi
+	fi
+
+	SysBlockZram="/sys/block/zram${ZRAM_SWAP_DEV}"
+	DevBlockZram="/dev/zram${ZRAM_SWAP_DEV}"
+
+	if SwapAssigned "${DevBlockZram}"
+	then
+		log_failure_msg "Swap on \"${DevBlockZram}\" alive."
+		return 1
+	fi
+
+	if ! /bin/echo "${ZRAM_SWAP_COMP_ALGORITHM}" > "${SysBlockZram}/comp_algorithm"
+	then
+		log_failure_msg "\"${DevBlockZram}\" does not support \"${ZRAM_SWAP_COMP_ALGORITHM}\" compress."
+		return 1
+	fi
+	if ! /bin/echo "${ZRAM_SWAP_DISKSIZE}" > "${SysBlockZram}/disksize"
+	then
+		log_failure_msg "\"${DevBlockZram}\" does not accept size ${ZRAM_SWAP_DISKSIZE}."
+		return 1
+	fi
+
+	if ! /sbin/mkswap -L "swap-zram${ZRAM_SWAP_DEV}" "${DevBlockZram}"
+	then
+		log_failure_msg "Can not create swap on \"${DevBlockZram}\"."
+		return 1
+	fi
+	if ! /sbin/swapon -p "${ZRAM_SWAP_PRIORITY}" "${DevBlockZram}"
+	then
+		log_failure_msg "Can not activate swap \"${DevBlockZram}\"."
+		return 1
+	fi
+
+	/bin/cat << EOF_STATE > "${VarRunSwapState}"
+ZRAM_SWAP_DEV_ACTIVE="${ZRAM_SWAP_DEV}"
+EOF_STATE
+	result=$?
+	if [ ${result} -ne 0 ]
+	then
+		log_failure_msg "Can not save state \"${VarRunSwapState}\"."
+		return ${result}
+	fi
+	return 0
+}
+
+function ZrapSwapStop() {
+	local	result
+
+	if [ -z "${ZRAM_SWAP_DEV_ACTIVE}" ]
+	then
+		log_failure_msg "No zram swap activated."
+		return 1
+	fi
+
+	if [ ! -b "${DevBlockZramActive}" ]
+	then
+		log_failure_msg "There is no device \"${DevBlockZramActive}\"."
+		return 1
+	fi
+
+	/bin/sync
+	if ! /sbin/swapoff "${DevBlockZramActive}"
+	then
+		log_failure_msg "Can not remove zram swap \"${DevBlockZramActive}\"."
+		return 1
+	fi
+
+	/bin/cat << EOF_STATE > "${VarRunSwapState}"
+ZRAM_SWAP_DEV_ACTIVE=
+EOF_STATE
+	result=$?
+	if [ ${result} -ne 0 ]
+	then
+		log_failure_msg "Can not save state \"${VarRunSwapState}\"."
+		return ${result}
+	fi
+
+	/bin/sync
+	/bin/sleep 1
+
+	if [ -z "${ZRAM_SWAP_KEEP_KERNEL_MODULE}" ]
+	then
+		/sbin/modprobe -r zram
+	fi
+
+	return 0
+}
+
+case "$1" in
+(start)
+	ZramSwapStart
+	exit $?
+	;;
+(stop)
+	ZrapSwapStop
+	exit $?
+
+(restart)
+	ZrapSwapStop
+	ZramSwapStart
+	exit $?
+(*)
+	/bin/echo "Usage: $0 {start|stop|restart}" 1>&2
+	exit 0
+        ;;
+esac
