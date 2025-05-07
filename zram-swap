@@ -2,7 +2,7 @@
 
 ### BEGIN INIT INFO
 # Description:     Setup zram based swap
-# Config:          /etc/default/zram
+# Config:          /etc/default/zram-swap
 # Provides:        zram
 # Required-Start:
 # Required-Stop:
