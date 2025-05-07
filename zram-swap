@@ -39,22 +39,6 @@ then
 	ZRAM_SWAP_NUM_DEVICES=1
 fi
 
-case "$1" in
-(start|restart)
-	if [ ! -d /sys/module/zram ] && [ ! -d /sys/class/zram-control ]
-	then
-		if ! /usr/sbin/modprobe zram "num_devices=${ZRAM_SWAP_NUM_DEVICES}"
-		then
-			log_failure_msg "Kernel does not provide zram module."
-			exit 1
-		fi
-	fi
-	;;
-(*)
-	# Do nothing.
-	;;
-esac
-
 if [ -z "${ZRAM_SWAP_DEV}" ]
 then
 	ZRAM_SWAP_DEV=0
@@ -75,6 +59,9 @@ then
 	ZRAM_SWAP_PRIORITY=20
 fi
 
+ZRAM_SWAP_PROBED_KERNEL_MODS=""
+ZRAM_SWAP_DEV_ACTIVE=""
+
 SysBlockZram=""
 DevBlockZram=""
 VarRunSwapState="${VarRunDir}/state"
@@ -93,6 +80,16 @@ DevBlockZramActive="/dev/zram${ZRAM_SWAP_DEV_ACTIVE}"
 
 function ZramSwapStart() {
 	local	result
+
+	if [ ! -d /sys/module/zram ] && [ ! -d /sys/class/zram-control ]
+	then
+		if ! /usr/sbin/modprobe zram "num_devices=${ZRAM_SWAP_NUM_DEVICES}"
+		then
+			log_failure_msg "Kernel does not provide zram module."
+			exit 1
+		fi
+		ZRAM_SWAP_PROBED_KERNEL_MODS="${ZRAM_SWAP_PROBED_KERNEL_MODS} zram"
+	fi
 
 	if [ "${ZRAM_SWAP_DEV}" == "hot_add" ]
 	then
@@ -138,6 +135,7 @@ function ZramSwapStart() {
 
 	/bin/cat << EOF_STATE > "${VarRunSwapState}"
 ZRAM_SWAP_DEV_ACTIVE="${ZRAM_SWAP_DEV}"
+ZRAM_SWAP_PROBED_KERNEL_MODS="${ZRAM_SWAP_PROBED_KERNEL_MODS}"
 EOF_STATE
 	result=$?
 	if [ ${result} -ne 0 ]
@@ -150,6 +148,7 @@ EOF_STATE
 
 function ZrapSwapStop() {
 	local	result
+	local	kmod
 
 	if [ -z "${ZRAM_SWAP_DEV_ACTIVE}" ]
 	then
@@ -170,9 +169,10 @@ function ZrapSwapStop() {
 		return 1
 	fi
 
-	/bin/cat << EOF_STATE > "${VarRunSwapState}"
+	/bin/cat << EOF_STATE_AC > "${VarRunSwapState}"
 ZRAM_SWAP_DEV_ACTIVE=
-EOF_STATE
+ZRAM_SWAP_PROBED_KERNEL_MODS="${ZRAM_SWAP_PROBED_KERNEL_MODS}"
+EOF_STATE_AC
 	result=$?
 	if [ ${result} -ne 0 ]
 	then
@@ -185,7 +185,21 @@ EOF_STATE
 
 	if [ -z "${ZRAM_SWAP_KEEP_KERNEL_MODULE}" ]
 	then
-		/sbin/modprobe -r zram
+		for kmod in ${ZRAM_SWAP_PROBED_KERNEL_MODS}
+		do
+			/sbin/modprobe -r "${kmod}"
+		done
+	fi
+
+	/bin/cat << EOF_STATE_MR > "${VarRunSwapState}"
+ZRAM_SWAP_DEV_ACTIVE=
+ZRAM_SWAP_PROBED_KERNEL_MODS=
+EOF_STATE_MR
+	result=$?
+	if [ ${result} -ne 0 ]
+	then
+		log_failure_msg "Can not clear state \"${VarRunSwapState}\"."
+		return ${result}
 	fi
 
 	return 0
