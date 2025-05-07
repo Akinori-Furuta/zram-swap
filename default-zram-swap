@@ -1,0 +1,51 @@
+#!/bin/bash
+# zram-swap default settings.
+
+# ZRAM_SWAP_NUM_DEVICES
+# default 1
+# The number of zram block devices those are pre-created
+# by zram kernel module at probe.
+# ZRAM_SWAP_NUM_DEVICES=1
+
+# ZRAM_SWAP_DEV
+# default 0
+# The number of zram block device to create swap.
+# Create swap on /dev/zram${ZRAM_SWAP_DEV}
+# Special value "hot_add" creates new zram device
+# and create swap on it.
+# ZRAM_SWAP_DEV=0
+
+# ZRAM_SWAP_COMP_ALGORITHM
+# default lz4
+# The compression algorithm to apply the zram device.
+# On Raspberry Pi, choose one of,
+#   lzo lzo-rle lz4 zstd
+# Estimated compression ratios:
+#  algorithm,  compression ratio (RAMUsageSize/SwappedSize)
+#   lz4,  1/3
+#   zstd, 1/4
+# ZRAM_SWAP_COMP_ALGORITHM="lz4"
+
+# ZRAM_SWAP_DISKSIZE
+# default 256M
+# The size of swap device on zram.
+# We can see the swap device size on zram as ${ZRAM_SWAP_DISKSIZE} bytes.
+# We can specify the size value with information unit
+# suffix which is one of { K, M, G, T, P, E }. 'K' means 1024 bytes.
+# On Raspberry Pi, suffix 'K' and 'M' are most useful.
+# ZRAM_SWAP_DISKSIZE="256M"
+
+# ZRAM_SWAP_PRIORITY
+# default 20
+# The priority value to apply swap on zram.
+# The higher value to more prefer to swap out.
+# ZRAM_SWAP_PRIORITY=20
+
+# ZRAM_SWAP_KEEP_KERNEL_MODULE
+# default Not Specified or No Value
+# Set some strings to this variable, keep the zram kernel module
+# after stopping zram-swap service.
+# When you want to keep the zram kernel module after stopping zram-swap
+# service, set "yes" to this variable. This may keeps compatibility with
+# future releases.
+# ZRAM_SWAP_KEEP_KERNEL_MODULE=
