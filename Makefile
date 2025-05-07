@@ -22,10 +22,10 @@ install: zram-swap default-zram-swap
 		  default-zram-swap "/etc/default/$(ZRAM_SWAP_UNIT)"
 	$(SYSYEMCTL) daemon-reload
 	$(SYSYEMCTL) enable "$(ZRAM_SWAP_UNIT)"
-	$(ECHO) "Installed the unit \"$(ZRAM_SWAP_UNIT)\"."
-	$(ECHO) "Now, the unit \"$(ZRAM_SWAP_UNIT)\" is not started."
-	$(ECHO) "To start this unit at now,"
-	$(ECHO) "  sudo $(SYSYEMCTL) start \"$(ZRAM_SWAP_UNIT)\""
+	@$(ECHO) "Installed the unit \"$(ZRAM_SWAP_UNIT)\"."
+	@$(ECHO) "Now, the unit \"$(ZRAM_SWAP_UNIT)\" is not started."
+	@$(ECHO) "To start this unit at now,"
+	@$(ECHO) "  sudo $(SYSYEMCTL) start \"$(ZRAM_SWAP_UNIT)\""
 
 uninstall:
 	-$(SYSYEMCTL) stop "$(ZRAM_SWAP_UNIT)"
