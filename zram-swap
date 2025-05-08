@@ -186,7 +186,8 @@ function ZrapSwapStop() {
 		return 1
 	fi
 
-	ZRAM_SWAP_DEV_ACTIVE=""
+	# Note: Save ${ZRAM_SWAP_DEV} as ZRAM_SWAP_DEV_ACTIVE
+	ZRAM_SWAP_DEV=""
 
 	if ! SwapStateSave
 	then
