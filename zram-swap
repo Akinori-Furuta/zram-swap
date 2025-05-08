@@ -60,16 +60,34 @@ then
 fi
 
 ZRAM_SWAP_PROBED_KERNEL_MODS=""
+ZRAM_SWAP_DEV_ACTIVE_HOT_ADD=""
 ZRAM_SWAP_DEV_ACTIVE=""
 
 SysBlockZram=""
 DevBlockZram=""
+HotAdded=""
 VarRunSwapState="${VarRunDir}/state"
 
 if [ -r "${VarRunSwapState}" ]
 then
 	source "${VarRunSwapState}"
 fi
+
+function SwapStateSave() {
+	local	result
+
+	/bin/cat << EOF_STATE > "${VarRunSwapState}"
+ZRAM_SWAP_DEV_ACTIVE_HOT_ADD="${HotAdded}"
+ZRAM_SWAP_DEV_ACTIVE="${ZRAM_SWAP_DEV}"
+ZRAM_SWAP_PROBED_KERNEL_MODS="${ZRAM_SWAP_PROBED_KERNEL_MODS}"
+EOF_STATE
+	result=$?
+	if [ ${result} -ne 0 ]
+	then
+		log_failure_msg "Can not save state \"${VarRunSwapState}\"."
+	fi
+	return $?
+}
 
 function SwapAssigned() {
 	/sbin/swapon --noheadings | /bin/awk '{print $1}' | /bin/grep -w -q "${DevBlockZram}"
@@ -93,13 +111,14 @@ function ZramSwapStart() {
 
 	if [ "${ZRAM_SWAP_DEV}" == "hot_add" ]
 	then
-		ZRAM_SWAP_DEV="$( cat /sys/class/zram-control/hot_add )"
+		ZRAM_SWAP_DEV="$( /bin/cat /sys/class/zram-control/hot_add )"
 		result=$?
 		if [ ${result} -ne 0 ]
 		then
 			log_failure_msg "Can not hot add zram device."
 			return 1
 		fi
+		HotAdded="hot_add"
 	fi
 
 	SysBlockZram="/sys/block/zram${ZRAM_SWAP_DEV}"
@@ -133,15 +152,9 @@ function ZramSwapStart() {
 		return 1
 	fi
 
-	/bin/cat << EOF_STATE > "${VarRunSwapState}"
-ZRAM_SWAP_DEV_ACTIVE="${ZRAM_SWAP_DEV}"
-ZRAM_SWAP_PROBED_KERNEL_MODS="${ZRAM_SWAP_PROBED_KERNEL_MODS}"
-EOF_STATE
-	result=$?
-	if [ ${result} -ne 0 ]
+	if ! SwapStateSave
 	then
-		log_failure_msg "Can not save state \"${VarRunSwapState}\"."
-		return ${result}
+		return 1
 	fi
 	return 0
 }
@@ -149,12 +162,16 @@ EOF_STATE
 function ZrapSwapStop() {
 	local	result
 	local	kmod
+	local	dev_active
 
 	if [ -z "${ZRAM_SWAP_DEV_ACTIVE}" ]
 	then
 		log_failure_msg "No zram swap activated."
 		return 1
 	fi
+
+	# Save Active zram mounted swap
+	dev_active="${ZRAM_SWAP_DEV_ACTIVE}"
 
 	if [ ! -b "${DevBlockZramActive}" ]
 	then
@@ -169,37 +186,52 @@ function ZrapSwapStop() {
 		return 1
 	fi
 
-	/bin/cat << EOF_STATE_AC > "${VarRunSwapState}"
-ZRAM_SWAP_DEV_ACTIVE=
-ZRAM_SWAP_PROBED_KERNEL_MODS="${ZRAM_SWAP_PROBED_KERNEL_MODS}"
-EOF_STATE_AC
-	result=$?
-	if [ ${result} -ne 0 ]
+	ZRAM_SWAP_DEV_ACTIVE=""
+
+	if ! SwapStateSave
 	then
-		log_failure_msg "Can not save state \"${VarRunSwapState}\"."
-		return ${result}
+		return 1
 	fi
 
-	/bin/sync
-	/bin/sleep 1
+	if [ -n "${ZRAM_SWAP_DEV_ACTIVE_HOT_ADD}" ]
+	then
+		/bin/sync
+		if ! /bin/echo "${dev_active}" > /sys/class/zram-control/hot_remove
+		then
+			log_failure_msg "Can not remove hot added zram \"${DevBlockZramActive}\"."
+		fi
+		return 1
+	fi
+
+	ZRAM_SWAP_DEV_ACTIVE_HOT_ADD=""
+
+	if ! SwapStateSave
+	then
+		return 1
+	fi
 
 	if [ -z "${ZRAM_SWAP_KEEP_KERNEL_MODULE}" ]
 	then
 		for kmod in ${ZRAM_SWAP_PROBED_KERNEL_MODS}
 		do
-			/sbin/modprobe -r "${kmod}"
+			if [ -n "${kmod}" ]
+			then
+				/bin/sync
+				/sbin/modprobe -r "${kmod}"
+				# We may seen error here,
+				# * Already the module has been
+				#   removed from the kernel.
+				# * Other module owned the module.
+				# So, we will not remove the module again.
+			fi
 		done
 	fi
 
-	/bin/cat << EOF_STATE_MR > "${VarRunSwapState}"
-ZRAM_SWAP_DEV_ACTIVE=
-ZRAM_SWAP_PROBED_KERNEL_MODS=
-EOF_STATE_MR
-	result=$?
-	if [ ${result} -ne 0 ]
+	ZRAM_SWAP_PROBED_KERNEL_MODS=""
+
+	if ! SwapStateSave
 	then
-		log_failure_msg "Can not clear state \"${VarRunSwapState}\"."
-		return ${result}
+		return 1
 	fi
 
 	return 0
