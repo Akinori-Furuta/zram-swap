@@ -88,7 +88,7 @@ function ZramSwapStart() {
 			log_failure_msg "Kernel does not provide zram module."
 			exit 1
 		fi
-		ZRAM_SWAP_PROBED_KERNEL_MODS="${ZRAM_SWAP_PROBED_KERNEL_MODS} zram"
+		ZRAM_SWAP_PROBED_KERNEL_MODS="zram ${ZRAM_SWAP_PROBED_KERNEL_MODS}"
 	fi
 
 	if [ "${ZRAM_SWAP_DEV}" == "hot_add" ]
