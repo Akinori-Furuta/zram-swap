@@ -200,8 +200,8 @@ function ZrapSwapStop() {
 		if ! /bin/echo "${dev_active}" > /sys/class/zram-control/hot_remove
 		then
 			log_failure_msg "Can not remove hot added zram \"${DevBlockZramActive}\"."
+			return 1
 		fi
-		return 1
 	fi
 
 	ZRAM_SWAP_DEV_ACTIVE_HOT_ADD=""
