@@ -13,6 +13,7 @@ SYSYEMCTL=/bin/systemctl
 .PHONY: install uninstall
 
 install: zram-swap default-zram-swap
+	-$(SYSYEMCTL) daemon-reload
 	-$(SYSYEMCTL) stop "$(ZRAM_SWAP_UNIT)"
 	-$(SYSYEMCTL) disable "$(ZRAM_SWAP_UNIT)"
 	$(INSTALL) -o root -g root -m 744 zram-swap "/etc/init.d/$(ZRAM_SWAP_UNIT)"
