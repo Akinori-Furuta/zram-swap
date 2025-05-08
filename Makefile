@@ -16,9 +16,11 @@ install: zram-swap default-zram-swap
 	-$(SYSYEMCTL) stop "$(ZRAM_SWAP_UNIT)"
 	-$(SYSYEMCTL) disable "$(ZRAM_SWAP_UNIT)"
 	$(INSTALL) -o root -g root -m 744 zram-swap "/etc/init.d/$(ZRAM_SWAP_UNIT)"
-	$(TEST_EXPR) ! -f "/etc/default/$(ZRAM_SWAP_UNIT)" && \
+	-$(TEST_EXPR) ! -f "/etc/default/$(ZRAM_SWAP_UNIT)" && \
 		$(INSTALL) \
-		  -b -o root -g root -m 744 \
+		  -b numbered \
+		  -s $(RUN_TIME_STAMP) \
+		  -o root -g root -m 744 \
 		  default-zram-swap "/etc/default/$(ZRAM_SWAP_UNIT)"
 	$(SYSYEMCTL) daemon-reload
 	$(SYSYEMCTL) enable "$(ZRAM_SWAP_UNIT)"
