@@ -49,3 +49,9 @@
 # service, set "yes" to this variable. This may keeps compatibility with
 # future releases.
 # ZRAM_SWAP_KEEP_KERNEL_MODULE=
+
+# ZRAM_SWAP_SCRIPT_TIMEOUT
+# default 30
+# Seconds to wait required resources becomes ready in zram-swap script.
+# Note: This value may be approximate time. Wait slight more longer seconds.
+# ZRAM_SWAP_SCRIPT_TIMEOUT=30

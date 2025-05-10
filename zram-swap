@@ -13,6 +13,8 @@
 
 . /lib/lsb/init-functions
 
+PATH=/bin:/usr/bin:/sbin:/usr/sbin:/lib/lsb:/lib/lsb/init-functions.d
+
 MyBaseName="$( /bin/basename "$0" )"
 MyBaseNameNoSpace="$( /bin/echo -n "${MyBaseName}" | /bin/tr '\000-\040' '_' )"
 
@@ -59,6 +61,11 @@ then
 	ZRAM_SWAP_PRIORITY=20
 fi
 
+if [ -z "${ZRAM_SWAP_SCRIPT_TIMEOUT}" ]
+then
+	ZRAM_SWAP_SCRIPT_TIMEOUT=30
+fi
+
 ZRAM_SWAP_PROBED_KERNEL_MODS=""
 ZRAM_SWAP_DEV_ACTIVE_HOT_ADD=""
 ZRAM_SWAP_DEV_ACTIVE=""
@@ -87,6 +94,25 @@ EOF_STATE
 		log_failure_msg "Can not save state \"${VarRunSwapState}\"."
 	fi
 	return $?
+}
+
+# Wait device node becomes ready
+# args DeviceNodePath
+# echo Not Specified
+# return ==0: Ready, !=0: NotReady
+function WaitPathReady() {
+	local	count
+	local	time_out
+
+	time_out="$( /bin/expr "${ZRAM_SWAP_SCRIPT_TIMEOUT}" '*' 5 )"
+	count=0
+	while [ "${count}" -le "${time_out}" ]
+	do
+		[ -e "$1" ] && return 0
+		/bin/sleep 0.2
+		count="$( /bin/expr "${count}" + 1 )"
+	done
+	return 1
 }
 
 function SwapAssigned() {
@@ -123,6 +149,12 @@ function ZramSwapStart() {
 
 	SysBlockZram="/sys/block/zram${ZRAM_SWAP_DEV}"
 	DevBlockZram="/dev/zram${ZRAM_SWAP_DEV}"
+
+	if ! WaitPathReady "${DevBlockZram}"
+	then
+		log_failure_msg "Not found \"${DevBlockZram}\"."
+		return 1
+	fi
 
 	if SwapAssigned "${DevBlockZram}"
 	then
